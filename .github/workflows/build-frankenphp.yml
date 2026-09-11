@@ -1,0 +1,68 @@
+name: Build FrankenPHP binaries
+
+on:
+  workflow_dispatch:
+    inputs:
+      php-version:
+        description: PHP version
+        required: true
+        default: "8.4"
+        type: string
+      extensions:
+        description: Comma-separated static PHP extensions
+        required: true
+        default: "odbc,pdo_odbc,bcmath,calendar,ctype,curl,dba,dom,exif,fileinfo,filter,gd,libxml,mbregex,mbstring,ldap,msgpack,mysqli,mysqlnd,opcache,openssl,pcntl,pdo,pdo_mysql,pdo_pgsql,pdo_sqlite,pdo_sqlsrv,pgsql,phar,posix,readline,redis,session,simplexml,sockets,sodium,sqlite3,sqlsrv,tokenizer,xml,xmlreader,xmlwriter,zip,zlib"
+        type: string
+
+env:
+  PHP_VERSION: ${{ inputs['php-version'] }}
+  PHP_EXTENSIONS: ${{ inputs.extensions }}
+
+jobs:
+  linux-gnu:
+    name: Linux x86_64 GNU
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build FrankenPHP
+        working-directory: frankenphp
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          docker buildx build \
+            --file static-builder-gnu.Dockerfile \
+            --build-arg FRANKENPHP_VERSION="${GITHUB_SHA}" \
+            --build-arg PHP_VERSION="${PHP_VERSION}" \
+            --build-arg PHP_EXTENSIONS="${PHP_EXTENSIONS}" \
+            --build-arg CI=1 \
+            --secret id=github-token,env=GITHUB_TOKEN \
+            --tag custom-frankenphp-gnu \
+            --load .
+          container=$(docker create custom-frankenphp-gnu)
+          mkdir -p ../dist
+          docker cp "${container}:/go/src/app/dist/frankenphp-linux-x86_64" ../dist/frankenphp-linux-x86_64-gnu
+          docker rm "${container}"
+          ./../dist/frankenphp-linux-x86_64-gnu list-modules
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frankenphp-linux-x86_64-gnu
+          path: dist/frankenphp-linux-x86_64-gnu
+          compression-level: 0
+
+  macos-arm64:
+    name: macOS arm64
+    runs-on: macos-15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build FrankenPHP
+        run: |
+          ./scripts/build-macos-arm64.sh "${PHP_VERSION}" "${PHP_EXTENSIONS}"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frankenphp-macos-arm64
+          path: frankenphp/dist/frankenphp-mac-arm64
+          compression-level: 0
