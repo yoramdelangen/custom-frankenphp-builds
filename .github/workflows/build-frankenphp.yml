@@ -30,15 +30,16 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          test -f "${GITHUB_WORKSPACE}/frankenphp/static-builder-gnu.Dockerfile"
           docker buildx build \
-            --file static-builder-gnu.Dockerfile \
+            --file "${GITHUB_WORKSPACE}/frankenphp/static-builder-gnu.Dockerfile" \
             --build-arg FRANKENPHP_VERSION="${GITHUB_SHA}" \
             --build-arg PHP_VERSION="${PHP_VERSION}" \
             --build-arg PHP_EXTENSIONS="${PHP_EXTENSIONS}" \
             --build-arg CI=1 \
             --secret id=github-token,env=GITHUB_TOKEN \
             --tag custom-frankenphp-gnu \
-            --load .
+            --load "${GITHUB_WORKSPACE}/frankenphp"
           container=$(docker create custom-frankenphp-gnu)
           mkdir -p ../dist
           docker cp "${container}:/go/src/app/dist/frankenphp-linux-x86_64" ../dist/frankenphp-linux-x86_64-gnu
@@ -65,4 +66,27 @@ jobs:
         with:
           name: frankenphp-macos-arm64
           path: frankenphp/dist/frankenphp-mac-arm64
+          compression-level: 0
+
+  windows-x86_64:
+    name: Windows x86_64
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download FrankenPHP Windows package
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Path dist -Force | Out-Null
+          $archive = Join-Path $env:RUNNER_TEMP "frankenphp-windows-x86_64.zip"
+          Invoke-WebRequest `
+            -Uri "https://github.com/php/frankenphp/releases/latest/download/frankenphp-windows-x86_64.zip" `
+            -OutFile $archive
+          Expand-Archive -Path $archive -DestinationPath dist -Force
+          .\dist\frankenphp.exe list-modules
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: frankenphp-windows-x86_64
+          path: dist
           compression-level: 0
